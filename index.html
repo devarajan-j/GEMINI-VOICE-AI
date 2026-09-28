@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemini Voice AI</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#182033;--muted:#687386;--primary:#6c4cff;--accent:#00b8d9;--border:#e5e9f2}
+body.dark{--bg:#10131c;--card:#181d29;--text:#f4f7ff;--muted:#aab3c5;--border:#2a3140}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+.app{display:flex;height:100vh}.sidebar{width:280px;background:var(--card);border-right:1px solid var(--border);padding:20px;display:flex;flex-direction:column;gap:16px}
+.logo{font-weight:800;font-size:20px}.logo span{background:linear-gradient(90deg,#6c4cff,#00b8d9);-webkit-background-clip:text;color:transparent}
+button{border:0;border-radius:12px;padding:11px 14px;cursor:pointer;font-weight:700}.new{background:linear-gradient(90deg,#6c4cff,#00b8d9);color:white}.history{overflow:auto;flex:1}.item{padding:10px;border-radius:10px;margin-bottom:6px;cursor:pointer}.item:hover,.item.active{background:rgba(108,76,255,.12)}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:8px}.main{flex:1;display:flex;flex-direction:column;min-width:0}.header{height:70px;padding:0 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card)}
+.status{color:#18a558;font-size:13px}.chat{flex:1;overflow:auto;padding:28px;display:flex;flex-direction:column;gap:18px}.welcome{text-align:center;margin:auto;max-width:720px}.welcome h1{font-size:42px;margin:10px 0;background:linear-gradient(90deg,#6c4cff,#00b8d9);-webkit-background-clip:text;color:transparent}.suggestions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}.suggestions button{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.msg{display:flex;gap:12px;max-width:850px;width:100%;margin:auto}.avatar{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#6c4cff,#00b8d9);color:white;flex:none}.bubble{background:var(--card);border:1px solid var(--border);padding:14px 16px;border-radius:16px;white-space:pre-wrap;line-height:1.55;flex:1}.user .bubble{background:rgba(108,76,255,.10)}
+.composer{padding:16px 24px;border-top:1px solid var(--border);background:var(--card)}.inputbox{max-width:900px;margin:auto;display:flex;gap:8px;align-items:end;border:1px solid var(--border);border-radius:18px;padding:8px;background:var(--bg)}textarea{flex:1;border:0;outline:0;background:transparent;color:var(--text);resize:none;min-height:44px;max-height:150px;padding:12px;font:inherit}.icon{background:transparent;color:var(--text);font-size:18px}.send{background:var(--primary);color:white}.listening{animation:pulse 1s infinite}@keyframes pulse{50%{transform:scale(1.12);opacity:.65}}
+.modal{position:fixed;inset:0;background:#0008;display:none;place-items:center;padding:20px}.modal.show{display:grid}.panel{background:var(--card);width:min(520px,100%);padding:24px;border-radius:20px}.panel input,.panel select{width:100%;padding:11px;margin:8px 0 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)}
+@media(max-width:800px){.sidebar{position:fixed;z-index:5;left:-290px;height:100%;transition:.25s}.sidebar.open{left:0}.suggestions{grid-template-columns:1fr}.menu{display:block!important}.chat{padding:18px}.header{padding:0 14px}.composer{padding:10px}.welcome h1{font-size:32px}}
+.menu{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar" id="sidebar">
+<div class="logo">✨ <span>GEMINI VOICE AI</span></div>
+<button class="new" onclick="newChat()">＋ New Chat</button>
+<input id="search" placeholder="🔎 Search history" oninput="renderHistory()" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)">
+<div class="history" id="history"></div>
+<div class="bottom"><button onclick="openSettings()">⚙️ Settings</button><button onclick="toggleTheme()">🌙 Theme</button></div>
+</aside>
+<main class="main">
+<header class="header"><div><button class="icon menu" onclick="toggleMenu()">☰</button> <b>Gemini Voice AI</b></div><span class="status">● Online</span></header>
+<section class="chat" id="chat"></section>
+<div class="composer"><div class="inputbox">
+<textarea id="input" placeholder="Write your message..." rows="1"></textarea>
+<button class="icon" id="mic" onclick="toggleListening()" aria-label="Voice input">🎤</button>
+<button class="send" onclick="sendMessage()">Send ➤</button>
+</div></div>
+</main>
+</div>
+<div class="modal" id="settingsModal"><div class="panel">
+<h2>Settings</h2><label>Gemini API Key</label><input id="apiKey" type="password" placeholder="Enter API key for demo mode">
+<label>Model</label><input id="model" value="gemini-3.1-flash-lite">
+<label>Voice</label><select id="voice"></select>
+<label><input id="autoSpeak" type="checkbox"> Auto speak AI responses</label>
+<div style="margin-top:18px;display:flex;gap:8px"><button onclick="saveSettings()" class="new">Save</button><button onclick="closeSettings()">Close</button></div>
+<p style="font-size:12px;color:var(--muted)">For production, keep the Gemini key on a server-side backend.</p>
+</div></div>
+<script>
+let chats=JSON.parse(localStorage.getItem('gva_chats')||'[]'), current=null, recognition=null, speaking=false;
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem('gva_chats',JSON.stringify(chats));renderHistory()}
+function newChat(){current={id:Date.now(),title:'New Conversation',messages:[]};render();renderHistory();$('sidebar').classList.remove('open')}
+function renderHistory(){let q=($('search').value||'').toLowerCase();$('history').innerHTML=chats.filter(c=>c.title.toLowerCase().includes(q)).map(c=>`<div class="item" onclick="loadChat(${c.id})">${escapeHtml(c.title)}</div>`).join('')}
+function loadChat(id){current=chats.find(c=>c.id===id)||current;render()}
+function render(){if(!current)newChat();let chat=$('chat');if(!current.messages.length){chat.innerHTML='<div class="welcome"><div style="font-size:50px">✨</div><h1>Hello!</h1><p>I'm Gemini Voice AI. How can I help you today?</p><div class="suggestions"><button onclick="suggest(\'Ask a question\')">💡 Ask a Question</button><button onclick="suggest(\'Help me write code\')">💻 Write Code</button><button onclick="suggest(\'Help me learn something\')">📚 Learn Something</button><button onclick="suggest(\'Help me write content\')">✍️ Write Content</button><button onclick="suggest(\'Give me creative ideas\')">🎨 Generate Ideas</button><button onclick="toggleListening()">🎤 Talk With AI</button></div></div>';return}
+chat.innerHTML=current.messages.map((m,i)=>`<div class="msg ${m.role==='user'?'user':''}"><div class="avatar">${m.role==='user'?'👤':'✨'}</div><div class="bubble">${format(m.content)}${m.role==='model'?`<div style="margin-top:10px"><button onclick="copyText(${i})">📋 Copy</button><button onclick="speak(${i})">🔊 Speak</button></div>`:''}</div></div>`).join('');chat.scrollTop=chat.scrollHeight}
+function suggest(t){$('input').value=t;$('input').focus()}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+function format(s){return escapeHtml(s).replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}
+async function sendMessage(){let text=$('input').value.trim();if(!text||!current)return;$('input').value='';current.messages.push({role:'user',content:text});if(current.title==='New Conversation')current.title=text.slice(0,35);render();let temp={role:'model',content:'✨ Gemini is thinking...'};current.messages.push(temp);render();
+try{let key=localStorage.getItem('gva_key')||'';let model=localStorage.getItem('gva_model')||'gemini-3.1-flash-lite';let response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:current.messages.slice(0,-1),api_key:key,model})});let data=await response.json();if(!data.success)throw Error(data.error||'Request failed');temp.content=data.response}catch(e){temp.content='Sorry, I could not complete the request. '+e.message}render();if(!chats.some(c=>c.id===current.id))chats.unshift(current);save();if($('autoSpeak').checked)speak(current.messages.length-1)}
+async function copyText(i){await navigator.clipboard.writeText(current.messages[i].content)}
+function speak(i){if(speaking){speechSynthesis.cancel();speaking=false;return}let u=new SpeechSynthesisUtterance(current.messages[i].content);u.voice=$('voice').selectedOptions[0]?.value?speechSynthesis.getVoices().find(v=>v.name===$('voice').value):null;u.onend=()=>speaking=false;speaking=true;speechSynthesis.speak(u)}
+function toggleListening(){if(!recognition){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('Speech recognition is not supported in this browser.');return}recognition=new SR();recognition.continuous=false;recognition.interimResults=false;recognition.lang='en-US';recognition.onresult=e=>$('input').value=e.results[0][0].transcript;recognition.onend=()=>{$('mic').classList.remove('listening')};}$('mic').classList.add('listening');recognition.start()}
+function toggleTheme(){document.body.classList.toggle('dark');localStorage.setItem('gva_theme',document.body.classList.contains('dark')?'dark':'light')}
+function toggleMenu(){$('sidebar').classList.toggle('open')}
+function openSettings(){$('apiKey').value=localStorage.getItem('gva_key')||'';$('model').value=localStorage.getItem('gva_model')||'gemini-3.1-flash-lite';$('settingsModal').classList.add('show')}
+function closeSettings(){$('settingsModal').classList.remove('show')}
+function saveSettings(){localStorage.setItem('gva_key',$('apiKey').value);localStorage.setItem('gva_model',$('model').value);closeSettings()}
+speechSynthesis.onvoiceschanged=()=>{let vs=speechSynthesis.getVoices();$('voice').innerHTML=vs.map(v=>`<option>${escapeHtml(v.name)}</option>`).join('')}
+$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}})
+if(localStorage.getItem('gva_theme')==='dark')document.body.classList.add('dark');
+if(!current)newChat();
+</script>
+</body>
+</html>
